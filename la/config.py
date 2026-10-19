@@ -26,6 +26,7 @@ DEFAULTS = {
     },
     "jobs": {
         "scrolls": 6,
+        "pages": 3,
         "min_pause_seconds": 2.0,
         "max_pause_seconds": 4.0,
     },

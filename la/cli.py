@@ -8,6 +8,7 @@ from .browser import SafetyStop, browser_session, is_logged_in, save_screenshot
 from .config import CONFIG_PATH, ROOT, load_config, project_path
 from .db import connect, save_jobs
 from .jobs import (
+    build_jobs_search_url,
     collect_jobs,
     export_jobs,
     list_jobs,
@@ -29,6 +30,7 @@ from .outreach import (
     send_followups,
     within_working_hours,
 )
+from .profile import save_profile, scan_profile, update_config_from_profile
 from .util import print_table
 
 JOB_STATUSES = {
@@ -94,10 +96,19 @@ def cmd_doctor(args, cfg, con) -> int:
 
 
 def cmd_jobs_collect(args, cfg, con) -> int:
+    url = args.url or (
+        build_jobs_search_url(args.query, args.location or "Japan", args.level)
+        if args.query
+        else ""
+    )
+    if not url:
+        print("Pass --url or --query (with optional --location and --level).")
+        return 2
+
     with browser_session(cfg) as (page, context):
         if not _require_login(context):
             return 2
-        jobs = collect_jobs(page, cfg, args.url)
+        jobs = collect_jobs(page, cfg, url)
         new_count = save_jobs(con, jobs)
         if not jobs:
             print(f"No jobs found. Screenshot: {save_screenshot(page, cfg, 'jobs_collect_empty')}")
@@ -316,6 +327,27 @@ def cmd_outreach_mark(args, cfg, con) -> int:
     return 2
 
 
+def cmd_profile_scan(args, cfg, con) -> int:
+    with browser_session(cfg) as (page, context):
+        if not _require_login(context):
+            return 2
+        profile = scan_profile(page, cfg, args.url)
+
+    json_path, md_path = save_profile(profile, cfg)
+    if args.update_config:
+        config_path = update_config_from_profile(profile)
+        print(f"Updated profile fields in {config_path}")
+
+    skills = profile.get("skills") or []
+    print(f"Scanned: {profile.get('name') or '(name not found)'}")
+    print(f"Headline: {profile.get('headline') or '-'}")
+    print(f"Location: {profile.get('location') or '-'}")
+    print(f"Skills captured: {len(skills)}")
+    print(f"Saved: {json_path}")
+    print(f"Saved: {md_path}")
+    return 0
+
+
 def cmd_stats(args, cfg, con) -> int:
     print("Jobs by status")
     print_table(
@@ -356,11 +388,35 @@ def build_parser() -> argparse.ArgumentParser:
     stats = sub.add_parser("stats", help="Show stored job/contact/action totals")
     stats.set_defaults(func=cmd_stats)
 
+    profile = sub.add_parser("profile", help="Your LinkedIn profile")
+    profile_sub = profile.add_subparsers(dest="profile_command")
+
+    profile_scan = profile_sub.add_parser(
+        "scan", help="Scan your own profile and save it locally"
+    )
+    profile_scan.add_argument(
+        "--url", help="Profile URL (default: profile.linkedin from config.yaml)"
+    )
+    profile_scan.add_argument(
+        "--update-config",
+        action="store_true",
+        help="Refresh name/headline/location/email in config.yaml",
+    )
+    profile_scan.set_defaults(func=cmd_profile_scan)
+
     jobs = sub.add_parser("jobs", help="Job tracker commands")
     jobs_sub = jobs.add_subparsers(dest="jobs_command")
 
     collect = jobs_sub.add_parser("collect", help="Collect jobs from a LinkedIn search URL")
-    collect.add_argument("--url", required=True, help="LinkedIn jobs search URL")
+    collect.add_argument("--url", help="Full LinkedIn jobs search URL")
+    collect.add_argument("--query", help="Search keywords, e.g. 'cybersecurity analyst'")
+    collect.add_argument("--location", default="", help="Location, e.g. Japan")
+    collect.add_argument(
+        "--level",
+        choices=["", "internship", "entry", "internship+entry"],
+        default="",
+        help="Optional LinkedIn experience filter",
+    )
     collect.set_defaults(func=cmd_jobs_collect)
 
     jobs_list = jobs_sub.add_parser("list", help="List stored jobs")
@@ -385,7 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     job_prep = jobs_sub.add_parser("prep", help="Generate an application pack per job")
     job_prep.add_argument("--limit", type=int, default=5)
     job_prep.add_argument("--status", default="", help="Filter by job status")
-    job_prep.add_argument("--id", default="", help="Single job id")
+    job_prep.add_argument("--id", default="", help="Job id, or comma-separated ids")
     job_prep.add_argument(
         "--fetch",
         action="store_true",

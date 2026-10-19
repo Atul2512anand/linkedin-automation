@@ -8,6 +8,7 @@ import re
 import sqlite3
 from collections import Counter
 from datetime import datetime
+from urllib.parse import urlencode
 
 from .browser import SafetyStop, assert_safe_page, dismiss_cookies, open_url
 from .config import project_path
@@ -36,6 +37,19 @@ POSTED_SELECTORS = (
     "time",
     ".job-card-container__listed-time",
 )
+
+LEVEL_FILTERS = {
+    "internship": "1",
+    "entry": "2",
+    "internship+entry": "1,2",
+}
+
+
+def build_jobs_search_url(query: str, location: str = "Japan", level: str = "") -> str:
+    params = {"keywords": query, "location": location or "Japan"}
+    if level in LEVEL_FILTERS:
+        params["f_E"] = LEVEL_FILTERS[level]
+    return "https://www.linkedin.com/jobs/search/?" + urlencode(params)
 
 
 def _text(scope, selectors) -> str:
@@ -98,6 +112,26 @@ def extract_cards(page, found: dict) -> None:
             continue
 
 
+def click_next_page(page) -> bool:
+    return bool(
+        page.evaluate(
+            """
+            () => {
+              const buttons = Array.from(document.querySelectorAll('button'));
+              const next = buttons.find(el => {
+                const aria = el.getAttribute('aria-label') || '';
+                const text = (el.innerText || '').trim().toLowerCase();
+                return aria === 'View next page' || text === 'next';
+              });
+              if (!next || next.disabled) return false;
+              next.click();
+              return true;
+            }
+            """
+        )
+    )
+
+
 def scroll_job_list(page) -> None:
     page.evaluate(
         """
@@ -114,6 +148,13 @@ def scroll_job_list(page) -> None:
               return;
             }
           }
+          const candidates = Array.from(document.querySelectorAll('div'))
+            .filter(el => el.scrollHeight > el.clientHeight + 200 && el.clientHeight > 250)
+            .filter(el => el.querySelector("a[href*='/jobs/view/']"));
+          if (candidates.length) {
+            candidates[0].scrollTop = candidates[0].scrollHeight;
+            return;
+          }
           window.scrollTo(0, document.body.scrollHeight);
         }
         """
@@ -127,13 +168,27 @@ def collect_jobs(page, cfg: dict, url: str) -> list[dict]:
     assert_safe_page(page)
 
     found: dict[str, dict] = {}
-    scrolls = int(cfg["jobs"].get("scrolls", 6))
-    for index in range(scrolls + 1):
+    pages = max(1, int(cfg["jobs"].get("pages", 3)))
+    scrolls = max(0, int(cfg["jobs"].get("scrolls", 6)))
+    for page_index in range(pages):
         extract_cards(page, found)
-        print(f"  [jobs] page position {index + 1}/{scrolls + 1}: {len(found)} jobs seen")
-        if index < scrolls:
+        print(f"  [jobs] page {page_index + 1}/{pages}: {len(found)} jobs seen")
+        if page_index + 1 >= pages:
+            break
+
+        if click_next_page(page):
+            page.wait_for_timeout(2500)
+            random_pause(cfg["jobs"], label="jobs")
+            continue
+
+        # Older layouts load more cards on scroll instead of pagination.
+        before = len(found)
+        for _ in range(scrolls):
             scroll_job_list(page)
             random_pause(cfg["jobs"], label="jobs")
+            extract_cards(page, found)
+        if len(found) == before:
+            break
 
     return list(found.values())
 
@@ -481,7 +536,13 @@ def prep_jobs(
     fetch: bool = False,
 ) -> list:
     if job_id:
-        rows = con.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchall()
+        ids = [part.strip() for part in job_id.split(",") if part.strip()]
+        placeholders = ",".join("?" for _ in ids)
+        rows = con.execute(
+            f"SELECT * FROM jobs WHERE job_id IN ({placeholders}) "
+            "ORDER BY updated_at DESC, job_id DESC",
+            tuple(ids),
+        ).fetchall()
     else:
         query = "SELECT * FROM jobs"
         params: list = []

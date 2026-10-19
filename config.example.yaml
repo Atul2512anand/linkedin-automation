@@ -14,7 +14,8 @@ storage:
   exports: data/exports
 
 jobs:
-  scrolls: 6               # how many times to scroll the job list per collection
+  scrolls: 6               # fallback scrolls for the older non-paginated layout
+  pages: 3                 # result pages to collect per search (7-ish jobs each)
   min_pause_seconds: 2.0
   max_pause_seconds: 4.0
   apply_daily_cap: 10      # manual applications logged per day

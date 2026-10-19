@@ -61,13 +61,43 @@ Check everything is wired up:
 
 ---
 
+## Your profile (local only)
+
+Save your own LinkedIn profile so the job tools can reuse it:
+
+```powershell
+.\run.cmd profile scan --update-config
+```
+
+This captures your headline, location, about, experience, education, skills, certifications, and contact info into:
+
+```
+data\profile\profile.json
+data\profile\profile.md
+```
+
+`--update-config` also refreshes `full_name`, `headline`, `location`, `email`, `portfolio`, and `summary` in `config.yaml`. Everything under `data\` and `config.yaml` is gitignored, so personal details are never published with the code.
+
+If you keep a structured resume at `data\profile\resume.json`, `la.profile.load_profile()` merges it with the LinkedIn scan under the `resume` key.
+
+---
+
 ## Job tracker
 
-Collect from any LinkedIn jobs search URL:
+Collect with search options (no URL quoting problems on Windows):
+
+```powershell
+.\run.cmd jobs collect --query "cybersecurity analyst" --location Japan
+.\run.cmd jobs collect --query "machine learning engineer" --location Japan --level internship+entry
+```
+
+`--level` accepts `internship`, `entry`, or `internship+entry`. You can still pass a full LinkedIn search URL:
 
 ```powershell
 .\run.cmd jobs collect --url "https://www.linkedin.com/jobs/search/?keywords=Data%20Scientist&location=Bengaluru"
 ```
+
+`jobs.pages` in `config.yaml` controls how many result pages are collected per search (default 3). `jobs.scrolls` is the fallback for older non-paginated layouts.
 
 Review, update, and export:
 
@@ -82,7 +112,7 @@ Review, update, and export:
 
 Statuses: `new`, `shortlisted`, `applied`, `interviewing`, `offer`, `rejected`, `archived`.
 
-Collecting twice is safe: jobs are deduplicated by LinkedIn job id. `jobs.scrolls` in `config.yaml` controls how far down the result list it scrolls.
+Collecting twice is safe: jobs are deduplicated by LinkedIn job id.
 
 ---
 
@@ -126,10 +156,11 @@ These values feed both the autofill panel and the prep packs. Blank fields show 
 .\run.cmd jobs prep --status shortlisted --limit 5 --fetch
 ```
 
-For one job:
+For one job (or several comma-separated ids):
 
 ```powershell
 .\run.cmd jobs prep --id 4123456789 --fetch
+.\run.cmd jobs prep --id 4123456789,4123456790 --fetch
 ```
 
 `--fetch` opens each posting to pull its description and derive keywords. Without it, packs are generated from the stored title/company only.
@@ -309,7 +340,8 @@ If a send fails, the screenshot path and error are printed and stored in `contac
 | `outreach.min/max_delay_seconds` | `45/150` | pause between profiles |
 | `outreach.working_hours` | `[10, 19]` | local time; `[0, 24]` disables the window |
 | `outreach.send_connection_note` | `true` | attach the note |
-| `jobs.scrolls` | `6` | job-list scroll passes per collection |
+| `jobs.scrolls` | `6` | fallback job-list scroll passes per collection |
+| `jobs.pages` | `3` | result pages collected per search |
 | `jobs.apply_daily_cap` | `10` | manual applications logged per day |
 | `profile.*` | `-` | autofill panel values and prep-pack personalization |
 
@@ -323,7 +355,7 @@ The action log in SQLite is what enforces caps, so restarting the app does not r
 
 **"Connect/Message button not found"** - the profile may use Follow only, be a company page, or LinkedIn changed its DOM. Run `outreach inspect` and check the screenshot in `data\screenshots\`.
 
-**No jobs collected** - open the search URL manually while signed in. LinkedIn sometimes redirects logged-out or rate-limited sessions. Increase `jobs.scrolls` for longer lists.
+**No jobs collected** - open the search URL manually while signed in. LinkedIn sometimes redirects logged-out or rate-limited sessions. Increase `jobs.pages` (or `jobs.scrolls` for an older layout) for longer lists.
 
 **Chrome won't launch / profile locked** - close other Chrome windows using that automation profile, or change `browser.profile_dir`. Do not point it at your everyday Chrome profile.
 
@@ -343,11 +375,13 @@ linkedin-automation/
     cli.py                 # command line interface
     browser.py             # Playwright session + safety checks
     jobs.py                # job collection/export
+    profile.py             # own-profile scan + local profile merge
     outreach.py            # contacts, notes, send logic, caps
     db.py                  # SQLite schema and helpers
     config.py, util.py
   data/
     automation.db          # jobs, contacts, action log
+    profile/               # local profile scan + resume (gitignored)
     exports/
     screenshots/
 ```

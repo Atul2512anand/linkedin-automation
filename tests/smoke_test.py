@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from la.config import load_config  # noqa: E402
 from la.jobs import (  # noqa: E402
     JOB_HELPER_JS,
+    build_jobs_search_url,
     build_prep_pack,
     extract_cards,
     keywords_from,
@@ -222,6 +223,16 @@ def test_batch_overlay() -> None:
         browser.close()
 
 
+def test_jobs_search_url() -> None:
+    url = build_jobs_search_url("machine learning engineer", "Japan", "internship+entry")
+    assert "keywords=machine+learning+engineer" in url
+    assert "location=Japan" in url
+    assert "f_E=1%2C2" in url
+
+    unfiltered = build_jobs_search_url("SOC analyst", "Japan")
+    assert "f_E" not in unfiltered
+
+
 def test_job_keywords() -> None:
     text = (
         "We are hiring a Java engineer with Spring Boot, Azure and Kubernetes. "
@@ -342,6 +353,7 @@ if __name__ == "__main__":
     test_people_search_url()
     test_profile_state()
     test_batch_overlay()
+    test_jobs_search_url()
     test_job_keywords()
     test_prep_pack()
     test_selection_parsing()
