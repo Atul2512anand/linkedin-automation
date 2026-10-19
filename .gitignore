@@ -1,0 +1,9 @@
+.venv/
+.browser-profile/
+data/
+config.yaml
+__pycache__/
+*.pyc
+tests/*_dump.html
+tests/*_dump.txt
+tests/card_tree.json

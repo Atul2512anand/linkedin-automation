@@ -1,0 +1,39 @@
+# LinkedIn automation - local configuration
+# A copy named config.yaml is created automatically on first run.
+
+browser:
+  channel: chrome          # chrome | msedge | "" (empty = bundled Playwright Chromium)
+  profile_dir: ${LOCALAPPDATA}/linkedin-automation/browser-profile
+  headless: false          # keep false: login and security checks need a visible browser
+  slow_mo_ms: 60
+  locale: en-US
+
+storage:
+  database: data/automation.db
+  screenshots: data/screenshots
+  exports: data/exports
+
+jobs:
+  scrolls: 6               # how many times to scroll the job list per collection
+  min_pause_seconds: 2.0
+  max_pause_seconds: 4.0
+
+outreach:
+  enabled: false           # master switch - must be true before anything can be sent
+  dry_run: true            # true = inspect only, never click Connect or Send
+  daily_cap: 10            # connection requests per day
+  weekly_cap: 50           # connection requests per week
+  min_delay_seconds: 45    # randomized pause between profiles
+  max_delay_seconds: 150
+  working_hours: [10, 19]  # local time, 24h; use [0, 24] to disable
+  send_connection_note: true
+  note_max_chars: 200
+
+templates:
+  connection_note: >-
+    Hi {first_name}, I'm exploring tech opportunities in Japan and would value
+    connecting with you. Thanks!
+  follow_up: >-
+    Hi {first_name}, thanks for connecting. I'm exploring tech opportunities in
+    Japan - would you be open to a quick chat, or could you point me to the
+    right person?
