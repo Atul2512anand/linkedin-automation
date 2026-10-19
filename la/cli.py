@@ -7,7 +7,14 @@ from . import __version__
 from .browser import SafetyStop, browser_session, is_logged_in, save_screenshot
 from .config import CONFIG_PATH, ROOT, load_config, project_path
 from .db import connect, save_jobs
-from .jobs import collect_jobs, export_jobs, list_jobs, open_job
+from .jobs import (
+    collect_jobs,
+    export_jobs,
+    list_jobs,
+    open_job,
+    prep_jobs,
+    run_job_batch,
+)
 from .outreach import (
     CONTACT_STATUSES,
     build_people_search_url,
@@ -132,6 +139,33 @@ def cmd_jobs_open(args, cfg, con) -> int:
         return 2
     open_job(row["url"])
     print(f"Opened {row['url']}")
+    return 0
+
+
+def cmd_jobs_prep(args, cfg, con) -> int:
+    if args.fetch:
+        with browser_session(cfg) as (page, context):
+            if not _require_login(context):
+                return 2
+            paths = prep_jobs(
+                con, cfg, page, args.limit, args.status, args.id, fetch=True
+            )
+    else:
+        paths = prep_jobs(con, cfg, None, args.limit, args.status, args.id, fetch=False)
+
+    if paths:
+        print(f"Wrote {len(paths)} application pack(s) to {paths[0].parent}")
+    return 0
+
+
+def cmd_jobs_batch(args, cfg, con) -> int:
+    with browser_session(cfg) as (page, context):
+        if not _require_login(context):
+            return 2
+        summary = run_job_batch(con, cfg, page, args.limit, args.status, args.keep_open)
+    if summary is None:
+        return 0
+    print(f"Logged {summary['applied']} application(s), skipped {summary['skipped']}.")
     return 0
 
 
@@ -347,6 +381,27 @@ def build_parser() -> argparse.ArgumentParser:
     job_open = jobs_sub.add_parser("open", help="Open a stored job in the browser")
     job_open.add_argument("job_id")
     job_open.set_defaults(func=cmd_jobs_open)
+
+    job_prep = jobs_sub.add_parser("prep", help="Generate an application pack per job")
+    job_prep.add_argument("--limit", type=int, default=5)
+    job_prep.add_argument("--status", default="", help="Filter by job status")
+    job_prep.add_argument("--id", default="", help="Single job id")
+    job_prep.add_argument(
+        "--fetch",
+        action="store_true",
+        help="Open each posting to pull its description for keywords",
+    )
+    job_prep.set_defaults(func=cmd_jobs_prep)
+
+    job_batch = jobs_sub.add_parser(
+        "batch", help="Open shortlisted jobs in tabs for manual applications"
+    )
+    job_batch.add_argument("--limit", type=int, default=10)
+    job_batch.add_argument("--status", default="shortlisted")
+    job_batch.add_argument(
+        "--keep-open", action="store_true", help="Leave tabs open after logging"
+    )
+    job_batch.set_defaults(func=cmd_jobs_batch)
 
     contacts = sub.add_parser("contacts", help="Outreach contact commands")
     contacts_sub = contacts.add_subparsers(dest="contacts_command")

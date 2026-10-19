@@ -17,6 +17,22 @@ jobs:
   scrolls: 6               # how many times to scroll the job list per collection
   min_pause_seconds: 2.0
   max_pause_seconds: 4.0
+  apply_daily_cap: 10      # manual applications logged per day
+
+profile:                   # used by the autofill panel and the prep packs
+  full_name: "Your Name"
+  email: "you@example.com"
+  phone: ""
+  location: ""
+  linkedin: "https://www.linkedin.com/in/your-profile"
+  github: ""
+  portfolio: ""
+  headline: ""             # e.g. "Software developer (TypeScript / Python)"
+  summary: ""              # two or three lines about what you do
+  notice_period: ""
+  expected_salary: ""
+  work_authorization: ""
+  relocation: ""
 
 outreach:
   enabled: false           # master switch - must be true before anything can be sent
@@ -37,3 +53,16 @@ templates:
     Hi {first_name}, thanks for connecting. I'm exploring tech opportunities in
     Japan - would you be open to a quick chat, or could you point me to the
     right person?
+  cover_letter: |
+    Dear {company} hiring team,
+
+    I'm applying for the {title} position. {intro}
+
+    <Add one short paragraph tying your strongest project or experience to the
+    top keywords from the posting.>
+
+    I'd welcome the chance to discuss how I can contribute.
+
+    Best regards,
+    {full_name}
+    {email}{phone_line}{linkedin_line}

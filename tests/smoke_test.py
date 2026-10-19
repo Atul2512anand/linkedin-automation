@@ -8,7 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from la.config import load_config  # noqa: E402
-from la.jobs import extract_cards  # noqa: E402
+from la.jobs import (  # noqa: E402
+    JOB_HELPER_JS,
+    build_prep_pack,
+    extract_cards,
+    keywords_from,
+    parse_selection,
+)
 from la.outreach import (  # noqa: E402
     BATCH_OVERLAY_JS,
     build_people_search_url,
@@ -216,6 +222,100 @@ def test_batch_overlay() -> None:
         browser.close()
 
 
+def test_job_keywords() -> None:
+    text = (
+        "We are hiring a Java engineer with Spring Boot, Azure and Kubernetes. "
+        "Machine learning models. Machine learning pipelines. Java Java Azure."
+    )
+    keywords = keywords_from(text, 10)
+    assert "java" in keywords, keywords
+    assert "azure" in keywords, keywords
+    assert "machine learning" in keywords, keywords
+
+
+def test_prep_pack() -> None:
+    cfg = {
+        "profile": {
+            "full_name": "Atul Anand",
+            "email": "atul@example.com",
+            "phone": "",
+            "linkedin": "https://www.linkedin.com/in/test",
+            "summary": "I build TypeScript and Python tools.",
+            "notice_period": "30 days",
+            "expected_salary": "",
+            "work_authorization": "",
+            "relocation": "Open to Japan",
+        },
+        "templates": {
+            "cover_letter": (
+                "Dear {company} team,\n\n"
+                "I'm applying for {title}. {intro}\n\n"
+                "{full_name}\n{email}{phone_line}{linkedin_line}"
+            )
+        },
+    }
+    job = {
+        "job_id": "123",
+        "title": "Backend Engineer",
+        "company": "Acme",
+        "location": "Tokyo",
+        "posted": "1 day ago",
+        "status": "shortlisted",
+        "url": "https://www.linkedin.com/jobs/view/123/",
+        "collected_at": "2026-10-19T12:00:00",
+    }
+    text = build_prep_pack(cfg, job, "Java Java Azure Kubernetes")
+    assert "Backend Engineer" in text
+    assert "Acme" in text
+    assert "java" in text
+    assert "30 days" in text
+    assert "Atul Anand" in text
+    assert "Dear Acme team" in text
+
+
+def test_selection_parsing() -> None:
+    assert parse_selection("all", 3) == [1, 2, 3]
+    assert parse_selection("1 3", 3) == [1, 3]
+    assert parse_selection("1,2", 3) == [1, 2]
+    assert parse_selection("none", 3) == []
+    assert parse_selection("9", 3) == []
+
+
+def test_job_helper_overlay() -> None:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.set_content(
+            "<html><body><main><h1>Job</h1>"
+            "<div role='dialog'><form><input name='name'></form></div>"
+            "</main></body></html>"
+        )
+        page.evaluate(
+            JOB_HELPER_JS,
+            {
+                "title": "1. Backend Engineer @ Acme",
+                "fields": [
+                    {"label": "Full name", "value": "Atul Anand"},
+                    {"label": "Phone", "value": ""},
+                ],
+            },
+        )
+        panel = page.locator("#la-job-panel")
+        assert panel.count() == 1
+        assert page.locator(".la-job-helper").count() == 1
+        text = panel.inner_text()
+        assert "Atul Anand" in text and "not set" in text
+
+        page.locator("#la-job-panel button").first.click()
+        page.wait_for_function(
+            "document.querySelector('#la-job-panel button').textContent === 'Copied'",
+            timeout=3000,
+        )
+        browser.close()
+
+
 def test_job_extraction() -> None:
     from playwright.sync_api import sync_playwright
 
@@ -242,5 +342,9 @@ if __name__ == "__main__":
     test_people_search_url()
     test_profile_state()
     test_batch_overlay()
+    test_job_keywords()
+    test_prep_pack()
+    test_selection_parsing()
+    test_job_helper_overlay()
     test_job_extraction()
     print("All smoke tests passed.")

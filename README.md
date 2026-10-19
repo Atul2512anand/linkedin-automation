@@ -3,7 +3,8 @@
 A small Python + Playwright tool for:
 
 1. **Job tracker** - collect listings from a LinkedIn jobs search URL into a local SQLite database, update statuses, export CSV/JSON.
-2. **Assisted outreach** - discover contacts from LinkedIn people search or import a CSV, preview personalized notes, open them in browser tabs for manual Connect clicks, or send at a deliberately slow rate with hard caps and an explicit `--confirm`.
+2. **Application workflow** - generate a per-job prep pack (cover-letter draft, posting keywords, screening answers), then open shortlisted jobs in tabs with an autofill panel for manual submission.
+3. **Assisted outreach** - discover contacts from LinkedIn people search or import a CSV, preview personalized notes, open them in browser tabs for manual Connect clicks, or send at a deliberately slow rate with hard caps and an explicit `--confirm`.
 
 Everything runs locally. Your LinkedIn password is never seen or stored; the browser session lives in a local Chrome profile directory.
 
@@ -82,6 +83,77 @@ Review, update, and export:
 Statuses: `new`, `shortlisted`, `applied`, `interviewing`, `offer`, `rejected`, `archived`.
 
 Collecting twice is safe: jobs are deduplicated by LinkedIn job id. `jobs.scrolls` in `config.yaml` controls how far down the result list it scrolls.
+
+---
+
+## Job applications
+
+The tool never clicks Apply or submits a form. It prepares the application, opens the tabs, and gives you copy-paste values; you stay in control of the submit button.
+
+### 1. Fill in your profile
+
+Edit the `profile:` block in `config.yaml`:
+
+```yaml
+profile:
+  full_name: "Your Name"
+  email: "you@example.com"
+  phone: "+91 ..."
+  location: "City, Country"
+  linkedin: "https://www.linkedin.com/in/your-profile"
+  github: "https://github.com/your-handle"
+  portfolio: "https://..."
+  headline: "Software developer (TypeScript / Python)"
+  summary: "Two or three lines about what you do."
+  notice_period: "30 days"
+  expected_salary: "..."
+  work_authorization: "..."
+  relocation: "..."
+```
+
+These values feed both the autofill panel and the prep packs. Blank fields show as `not set`.
+
+### 2. Shortlist jobs
+
+```powershell
+.\run.cmd jobs list --status new
+.\run.cmd jobs status 4123456789 shortlisted
+```
+
+### 3. Generate application packs
+
+```powershell
+.\run.cmd jobs prep --status shortlisted --limit 5 --fetch
+```
+
+For one job:
+
+```powershell
+.\run.cmd jobs prep --id 4123456789 --fetch
+```
+
+`--fetch` opens each posting to pull its description and derive keywords. Without it, packs are generated from the stored title/company only.
+
+Each pack lands in `data\exports\prep\<job_id>_<company>-<title>.md` and contains:
+
+- job summary and link
+- top keywords from the posting
+- a cover-letter draft from `templates.cover_letter`
+- answers to prepare (notice period, salary, authorization, relocation)
+- a pre-submit checklist
+
+### 4. Batch tabs for manual apply
+
+```powershell
+.\run.cmd jobs batch --status shortlisted --limit 10
+```
+
+- Opens up to 10 shortlisted jobs in separate Chrome tabs.
+- Each page gets an **Application details** panel: name, email, phone, location, LinkedIn, GitHub, portfolio. Click **Copy**, then paste into the form.
+- The same panel is injected *inside* the application dialog, so clicking Copy doesn't close the modal.
+- When you finish, press Enter and say which ones you applied to: `all`, `none`, or numbers like `1 3 5`.
+
+Applied jobs move to status `applied` and are logged as `apply` actions. Manual applications count toward `jobs.apply_daily_cap` (10/day by default) once logged. Use `--keep-open` to leave the tabs open.
 
 ---
 
@@ -238,6 +310,8 @@ If a send fails, the screenshot path and error are printed and stored in `contac
 | `outreach.working_hours` | `[10, 19]` | local time; `[0, 24]` disables the window |
 | `outreach.send_connection_note` | `true` | attach the note |
 | `jobs.scrolls` | `6` | job-list scroll passes per collection |
+| `jobs.apply_daily_cap` | `10` | manual applications logged per day |
+| `profile.*` | `-` | autofill panel values and prep-pack personalization |
 
 The action log in SQLite is what enforces caps, so restarting the app does not reset your daily count.
 
